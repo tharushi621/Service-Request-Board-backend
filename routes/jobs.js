@@ -1,8 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const JobRequest = require("../models/JobRequest");
+const { protect } = require("../middleware/authMiddleware");
 
-// GET /api/jobs - list all jobs with optional filters + keyword search
+// GET /api/jobs — public, list all jobs with optional filters + keyword search
 router.get("/", async (req, res, next) => {
   try {
     const { category, status, search } = req.query;
@@ -14,7 +15,6 @@ router.get("/", async (req, res, next) => {
     let jobs;
 
     if (search && search.trim()) {
-      // Use MongoDB text search
       jobs = await JobRequest.find(
         { $text: { $search: search.trim() }, ...filter },
         { score: { $meta: "textScore" } }
@@ -29,7 +29,7 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// GET /api/jobs/:id - fetch a single job
+// GET /api/jobs/:id — public
 router.get("/:id", async (req, res, next) => {
   try {
     const job = await JobRequest.findById(req.params.id);
@@ -42,11 +42,10 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// POST /api/jobs - create a new job
-router.post("/", async (req, res, next) => {
+// POST /api/jobs — protected
+router.post("/", protect, async (req, res, next) => {
   try {
-    const { title, description, category, location, contactName, contactEmail } =
-      req.body;
+    const { title, description, category, location, contactName, contactEmail } = req.body;
 
     const job = await JobRequest.create({
       title,
@@ -55,6 +54,7 @@ router.post("/", async (req, res, next) => {
       location,
       contactName,
       contactEmail,
+      postedBy: req.user.id, // attach the logged-in user's ID
     });
 
     res.status(201).json({ success: true, data: job });
@@ -63,15 +63,13 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// PATCH /api/jobs/:id - update status only
-router.patch("/:id", async (req, res, next) => {
+// PATCH /api/jobs/:id — protected
+router.patch("/:id", protect, async (req, res, next) => {
   try {
     const { status } = req.body;
 
     if (!status) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Status field is required" });
+      return res.status(400).json({ success: false, message: "Status field is required" });
     }
 
     const allowed = ["Open", "In Progress", "Closed"];
@@ -98,8 +96,8 @@ router.patch("/:id", async (req, res, next) => {
   }
 });
 
-// DELETE /api/jobs/:id - delete a job
-router.delete("/:id", async (req, res, next) => {
+// DELETE /api/jobs/:id — protected
+router.delete("/:id", protect, async (req, res, next) => {
   try {
     const job = await JobRequest.findByIdAndDelete(req.params.id);
 
